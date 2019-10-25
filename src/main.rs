@@ -4,29 +4,25 @@ extern crate bit_vec;
 
 use bit_vec::BitVec;
 use std::iter::repeat;
+use std::iter::FromIterator;
 use std::collections::HashMap;
 
 type EDict = HashMap<(usize, usize), usize>;
 type DDict = HashMap<usize, (usize, usize)>;
 
-fn bin (n: usize, len: usize) -> Result<BitVec, String> {
+fn bin (n: usize, len: usize) -> Result<Vec<bool>, String> {
     let b = format!("{:b}", n);
-
     if b.len() > len {
         return Err(format!(
             "It is not possible to represent {} with a {} digits binary number.",
             n, len
         ))
     }
-    Ok(
-        b.chars()
-            .map(|b| if b == '1' { true } else { false })
-            .rev().chain(
-                repeat(false).take(len - b.len())
-            )
-            .collect::<Vec<_>>().into_iter().rev()
-        .collect()
-    )
+    Ok(b.chars()
+        .map(|b| if b == '1' { true } else { false }).rev()
+        .chain(repeat(false).take(len - b.len()))
+        .collect::<Vec<_>>().into_iter().rev()
+    .collect())
 }
 
 fn dec (bin: BitVec) -> usize {
@@ -65,13 +61,17 @@ fn encode (input: &Vec<u8>) -> Vec<u8> {
     }
 
     let len = (256. + dict.len() as f64).log2().ceil() as usize;
-    output.into_iter()
+    let output : Vec<_> = output
+        .into_iter()
         .map(|n| bin(n, len).unwrap())
-        .fold(BitVec::new(), |mut out, mut curr| {
-            out.append(&mut curr);
-            out
-        })
-    .to_bytes()
+    .collect();
+
+    let output = output.into_iter().fold(vec!(), |mut out, mut curr| {
+        out.append(&mut curr);
+        out
+    });
+    
+    BitVec::<usize>::from_iter(output).to_bytes()
 }
 
 fn expand (n: usize, map: &DDict) -> Vec<u8> {
@@ -84,8 +84,19 @@ fn expand (n: usize, map: &DDict) -> Vec<u8> {
     vec!(n as u8)
 }
 
-fn decode (input: &Vec<usize>) -> Vec<u8> {
+fn decode (input: &Vec<u8>, len: usize) -> Vec<u8> {
     if input.len() == 0 { return vec!(); }
+
+    let input : Vec<_> = BitVec::from_bytes(input).into_iter()
+        .collect::<Vec<_>>()
+        .chunks_exact(len)
+        .map(|c|
+            dec(BitVec::from_iter(
+                c.iter().map(|c| *c))
+            )
+        )
+    .collect();
+
     let mut output = vec!();
     let mut dict = DDict::new();
     let mut code = 256_usize;
@@ -106,11 +117,11 @@ fn decode (input: &Vec<usize>) -> Vec<u8> {
 fn main() {
     let input = vec!(10, 12, 10, 12, 15, 26, 10, 12, 15, 26);
     let output = encode(&input);
-    // let _input = decode(&output);
+    let _input = decode(&output, 9);
 
     println!("Tamanho da entrada: {} bits.", input.len() * 8);
     println!("Entrada: {:?}\n", input);
     println!("Tamanho da saída: {} bits.", output.len() * 9);
     println!("Saída: {:?}\n", output);
-    // println!("Saída decodificada: {:?}", _input);
+    println!("Saída decodificada: {:?}", _input);
 }
